@@ -222,9 +222,11 @@ These guidelines apply to app-server protocol work in `codex-rs`, especially:
 
 This is my personal fork of `openai/codex` that adds support for
 driving Anthropic Claude models (primarily `claude-opus-4-7`) through
-the unmodified Codex CLI. This fork adds **one wrapper script** plus
-a couple of `~/.codex/config.toml` entries; no Codex CLI source files
-are modified, so upstream merges should generally apply cleanly.
+a near-stock Codex CLI. The footprint is intentionally small — two
+wrapper scripts, one new `models.json` entry, a tiny TUI rebrand, and
+a couple of `~/.codex/config.toml` entries — so upstream merges
+should generally apply cleanly. The Codex `core`/`cli`/`app-server`
+crates are untouched; the only Rust source edits live in `codex-tui`.
 
 ## What was added
 
@@ -245,9 +247,20 @@ are modified, so upstream merges should generally apply cleanly.
   entry so Codex's model registry recognises the Anthropic model when
   invoked via the anthroproxy provider.
 
-The Codex CLI (`codex-cli` crate) is unmodified; routing happens
-entirely via the `model_providers.anthroproxy` block in
-`~/.codex/config.toml` pointing at `http://127.0.0.1:6969/v1`.
+- **TUI rebrand** in `codex-rs/tui/` — the session header and status
+  card title were rewritten from `OpenAI Codex (vX.Y.Z)` to
+  `codexmaxxxing by clauseo`. The `version: &'static str` parameter
+  on `SessionHeaderHistoryCell::new` / `new_with_style` was removed
+  (no longer rendered), which rippled through `app.rs`,
+  `app/history_ui.rs`, `app/tests.rs`, `chatwidget.rs`, and
+  `status/card.rs`. The matching `insta` snapshots were
+  regenerated. Heads-up for upstream merges: when openai/codex
+  touches the same header lines, expect a small conflict in
+  `history_cell.rs` / `status/card.rs` plus a snapshot reaccept.
+
+Routing itself happens entirely via the `model_providers.anthroproxy`
+block in `~/.codex/config.toml` pointing at
+`http://127.0.0.1:6969/v1` — no provider plumbing was added in Rust.
 
 ## Where the translator lives now
 
@@ -269,4 +282,3 @@ hardening pass audit log, TDD discipline, Vertex compatibility floor
 Read that before changing translator behavior. Anything that needs
 saying about the translator inside *this* repo is just routing
 config; the contract lives next to the code.
-

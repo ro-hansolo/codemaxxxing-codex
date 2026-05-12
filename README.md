@@ -1,60 +1,87 @@
-<p align="center"><code>npm i -g @openai/codex</code><br />or <code>brew install --cask codex</code></p>
-<p align="center"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
-<p align="center">
-  <img src="https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png" alt="Codex CLI splash" width="80%" />
-</p>
-</br>
-If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="https://developers.openai.com/codex/ide">install in your IDE.</a>
-</br>If you want the desktop app experience, run <code>codex app</code> or visit <a href="https://chatgpt.com/codex?app-landing-page=true">the Codex App page</a>.
-</br>If you are looking for the <em>cloud-based agent</em> from OpenAI, <strong>Codex Web</strong>, go to <a href="https://chatgpt.com/codex">chatgpt.com/codex</a>.</p>
+# codemaxxxing-codex
 
----
+A personal playground fork of [`openai/codex`](https://github.com/openai/codex)
+that drives Anthropic Claude (Opus 4.7 by default) through a near-stock
+Codex CLI by routing every turn through a small local HTTP proxy
+that speaks Codex's OpenAI Responses dialect on the inbound side and
+the Anthropic Messages API on the outbound side.
+
+This is **not** a product. It is a reference rig and exploration
+space — a place to try ideas against the Codex codebase before
+porting anything worth keeping into our main daily driver,
+[`bb-deeplearning/codemaxxxing`](https://github.com/bb-deeplearning/codemaxxxing).
+
+## Where this fits
+
+There are two coding agents in this household:
+
+- **[codemaxxxing](https://github.com/bb-deeplearning/codemaxxxing)** —
+  the daily driver. An opinionated, heavily-customized fork of
+  [OpenCode](https://github.com/anomalyco/opencode) used internally
+  for all development on [Clauseo](https://clauseo.chat) and other
+  [bbdeeplearning.systems](https://bbdeeplearning.systems) projects.
+  Wave runner FSM, drafting-table TUI redesign, rewritten system
+  prompts, custom agents — substantial divergence from upstream.
+
+- **codemaxxxing-codex** (this repo) — the lab bench. A thin layer on
+  top of `openai/codex` that lets the same Claude Opus 4.7 backend
+  drive the Codex CLI/Desktop unmodified, so I can A/B agent
+  behavior, prompt strategies, and sandboxing tradeoffs against a
+  second harness without leaving my models or my routing setup.
+
+The naming overlap is intentional — same backend persona
+("codexmaxxxing by clauseo" in the rebranded TUI header), two
+different harnesses.
+
+## What's actually forked
+
+The footprint is intentionally small so upstream merges keep
+applying cleanly:
+
+- `scripts/cmxcdx`, `scripts/cmxcdx-app` — wrappers that launch the
+  forked Codex CLI / notarized Codex Desktop pointed at the local
+  Anthropic-routing proxy on `127.0.0.1:6969`.
+- `codex-rs/models-manager/models.json` — one new `claude-opus-4-7`
+  entry so Codex's model registry recognises the slug.
+- `codex-rs/tui/` — small rebrand of the session header and status
+  card from "OpenAI Codex (vX.Y.Z)" to "codexmaxxxing by clauseo",
+  plus regenerated `insta` snapshots. Codex `core`, `cli`, and
+  `app-server` crates are untouched.
+- `CMXCDX.md`, `AGENTS.md` — end-user setup and contributor notes
+  for this fork.
+
+No translator code lives in this repo any more. The OpenAI
+Responses → Anthropic Messages translator that briefly lived at
+`codex-rs/anthropic-translator/` has moved into a separate
+(private) Vertex/Anthropic routing workspace and now ships
+embedded inside the same proxy binary that already handles the
+rest of the household's Anthropic traffic. One process, one port,
+one bundle.
 
 ## Quickstart
 
-### Installing and running Codex CLI
+End-user setup, env vars, config.toml blocks, and troubleshooting
+all live in **[CMXCDX.md](./CMXCDX.md)**. The short version:
 
-Install globally with your preferred package manager:
+1. Have a local proxy running on `127.0.0.1:6969` that accepts
+   Codex's OpenAI Responses requests on `/v1/responses` and forwards
+   them to Anthropic (e.g. via Vertex). Any process that exposes
+   that contract works; the wrappers just expect the port to be up.
+2. `cd codex-rs && cargo build --release -p codex-cli`.
+3. Register that proxy as a `model_provider` in `~/.codex/config.toml`
+   with `wire_api = "responses"` and `base_url = "http://127.0.0.1:6969/v1"`,
+   and add an `opus` profile pointing at it (full block in CMXCDX.md).
+4. Symlink `scripts/cmxcdx` into your `PATH` and run `cmxcdx`.
 
-```shell
-# Install using npm
-npm install -g @openai/codex
-```
+## Upstream
 
-```shell
-# Install using Homebrew
-brew install --cask codex
-```
+Everything not listed under "What's actually forked" above is
+`openai/codex` as-is. For Codex itself — installation against
+OpenAI's hosted models, IDE integration, the desktop app, the
+cloud Codex Web agent — see the upstream
+[Codex Documentation](https://developers.openai.com/codex) and the
+[upstream README](https://github.com/openai/codex#readme).
 
-Then simply run `codex` to get started.
+## License
 
-<details>
-<summary>You can also go to the <a href="https://github.com/openai/codex/releases/latest">latest GitHub Release</a> and download the appropriate binary for your platform.</summary>
-
-Each GitHub Release contains many executables, but in practice, you likely want one of these:
-
-- macOS
-  - Apple Silicon/arm64: `codex-aarch64-apple-darwin.tar.gz`
-  - x86_64 (older Mac hardware): `codex-x86_64-apple-darwin.tar.gz`
-- Linux
-  - x86_64: `codex-x86_64-unknown-linux-musl.tar.gz`
-  - arm64: `codex-aarch64-unknown-linux-musl.tar.gz`
-
-Each archive contains a single entry with the platform baked into the name (e.g., `codex-x86_64-unknown-linux-musl`), so you likely want to rename it to `codex` after extracting it.
-
-</details>
-
-### Using Codex with your ChatGPT plan
-
-Run `codex` and select **Sign in with ChatGPT**. We recommend signing into your ChatGPT account to use Codex as part of your Plus, Pro, Business, Edu, or Enterprise plan. [Learn more about what's included in your ChatGPT plan](https://help.openai.com/en/articles/11369540-codex-in-chatgpt).
-
-You can also use Codex with an API key, but this requires [additional setup](https://developers.openai.com/codex/auth#sign-in-with-an-api-key).
-
-## Docs
-
-- [**Codex Documentation**](https://developers.openai.com/codex)
-- [**Contributing**](./docs/contributing.md)
-- [**Installing & building**](./docs/install.md)
-- [**Open source fund**](./docs/open-source-fund.md)
-
-This repository is licensed under the [Apache-2.0 License](LICENSE).
+Inherits the upstream Apache-2.0 license — see [LICENSE](./LICENSE).

@@ -6,7 +6,6 @@ use crate::history_cell::with_border_with_inner_width;
 use crate::legacy_core::config::Config;
 use crate::token_usage::TokenUsage;
 use crate::token_usage::TokenUsageInfo;
-use crate::version::CODEX_CLI_VERSION;
 use chrono::DateTime;
 use chrono::Local;
 use codex_app_server_protocol::AskForApproval;
@@ -646,9 +645,8 @@ impl HistoryCell for StatusHistoryCell {
         let mut lines: Vec<Line<'static>> = Vec::new();
         lines.push(Line::from(vec![
             Span::from(format!("{}>_ ", FieldFormatter::INDENT)).dim(),
-            Span::from("OpenAI Codex").bold(),
-            Span::from(" ").dim(),
-            Span::from(format!("(v{CODEX_CLI_VERSION})")).dim(),
+            Span::from("codexmaxxxing").bold(),
+            Span::from(" by clauseo").dim(),
         ]));
         lines.push(Line::from(Vec::<Span<'static>>::new()));
 

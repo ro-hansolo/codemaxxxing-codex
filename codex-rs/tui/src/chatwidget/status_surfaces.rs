@@ -8,6 +8,7 @@ use crate::bottom_pane::status_line_from_segments;
 use crate::branch_summary;
 use crate::legacy_core::config::Config;
 use crate::status::format_tokens_compact;
+use crate::version::CODEX_CLI_VERSION;
 use codex_app_server_protocol::AskForApproval;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::ServiceTier;

@@ -3876,7 +3876,7 @@ async fn render_clear_ui_header_after_long_transcript_for_snapshot() -> String {
     app.has_emitted_history_lines = true;
 
     let rendered = app
-        .clear_ui_header_lines_with_version(/*width*/ 80, "<VERSION>")
+        .clear_ui_header_lines(/*width*/ 80)
         .iter()
         .map(|line| {
             line.spans
@@ -3939,7 +3939,7 @@ async fn clear_ui_header_shows_fast_status_for_fast_capable_models() {
     set_fast_mode_test_catalog(&mut app.chat_widget);
 
     let rendered = app
-        .clear_ui_header_lines_with_version(/*width*/ 80, "<VERSION>")
+        .clear_ui_header_lines(/*width*/ 80)
         .iter()
         .map(|line| {
             line.spans

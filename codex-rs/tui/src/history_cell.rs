@@ -1507,7 +1507,6 @@ pub(crate) fn new_session_info(
         session.reasoning_effort,
         show_fast_status,
         config.cwd.to_path_buf(),
-        CODEX_CLI_VERSION,
     )
     .with_yolo_mode(has_yolo_permissions(
         session.approval_policy,
@@ -1619,7 +1618,6 @@ pub(crate) fn new_user_prompt(
 
 #[derive(Debug)]
 pub(crate) struct SessionHeaderHistoryCell {
-    version: &'static str,
     model: String,
     model_style: Style,
     reasoning_effort: Option<ReasoningEffortConfig>,
@@ -1634,7 +1632,6 @@ impl SessionHeaderHistoryCell {
         reasoning_effort: Option<ReasoningEffortConfig>,
         show_fast_status: bool,
         directory: PathBuf,
-        version: &'static str,
     ) -> Self {
         Self::new_with_style(
             model,
@@ -1642,7 +1639,6 @@ impl SessionHeaderHistoryCell {
             reasoning_effort,
             show_fast_status,
             directory,
-            version,
         )
     }
 
@@ -1652,10 +1648,8 @@ impl SessionHeaderHistoryCell {
         reasoning_effort: Option<ReasoningEffortConfig>,
         show_fast_status: bool,
         directory: PathBuf,
-        version: &'static str,
     ) -> Self {
         Self {
-            version,
             model,
             model_style,
             reasoning_effort,
@@ -1717,12 +1711,11 @@ impl HistoryCell for SessionHeaderHistoryCell {
 
         let make_row = |spans: Vec<Span<'static>>| Line::from(spans);
 
-        // Title line rendered inside the box: ">_ OpenAI Codex (vX)"
+        // Title line rendered inside the box: ">_ codexmaxxxing by clauseo"
         let title_spans: Vec<Span<'static>> = vec![
             Span::from(">_ ").dim(),
-            Span::from("OpenAI Codex").bold(),
-            Span::from(" ").dim(),
-            Span::from(format!("(v{})", self.version)).dim(),
+            Span::from("codexmaxxxing").bold(),
+            Span::from(" by clauseo").dim(),
         ];
 
         const CHANGE_MODEL_HINT_COMMAND: &str = "/model";
@@ -1787,7 +1780,7 @@ impl HistoryCell for SessionHeaderHistoryCell {
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
         let mut lines = vec![
-            Line::from(format!("OpenAI Codex (v{})", self.version)),
+            Line::from("codexmaxxxing by clauseo"),
             Line::from(format!(
                 "model: {}{}",
                 self.model,
@@ -4934,7 +4927,6 @@ mod tests {
             Some(ReasoningEffortConfig::High),
             /*show_fast_status*/ true,
             std::env::temp_dir(),
-            "test",
         );
 
         let lines = render_lines(&cell.display_lines(/*width*/ 80));
@@ -4954,7 +4946,6 @@ mod tests {
             Some(ReasoningEffortConfig::High),
             /*show_fast_status*/ false,
             std::env::temp_dir(),
-            "test",
         );
 
         let lines = render_lines(&cell.display_lines(/*width*/ 80));
@@ -4978,7 +4969,6 @@ mod tests {
             /*reasoning_effort*/ None,
             /*show_fast_status*/ false,
             test_path_buf("/tmp/project").abs().to_path_buf(),
-            "test",
         )
         .with_yolo_mode(/*yolo_mode*/ true);
 

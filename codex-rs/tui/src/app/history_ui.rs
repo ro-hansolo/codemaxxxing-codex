@@ -17,11 +17,7 @@ impl App {
             .add_info_message(format!("Opened {url} in your browser."), /*hint*/ None);
     }
 
-    pub(super) fn clear_ui_header_lines_with_version(
-        &self,
-        width: u16,
-        version: &'static str,
-    ) -> Vec<Line<'static>> {
+    pub(super) fn clear_ui_header_lines(&self, width: u16) -> Vec<Line<'static>> {
         history_cell::SessionHeaderHistoryCell::new(
             self.chat_widget.current_model().to_string(),
             self.chat_widget.current_reasoning_effort(),
@@ -30,14 +26,9 @@ impl App {
                 self.chat_widget.current_service_tier(),
             ),
             self.config.cwd.to_path_buf(),
-            version,
         )
         .with_yolo_mode(history_cell::is_yolo_mode(&self.config))
         .display_lines(width)
-    }
-
-    pub(super) fn clear_ui_header_lines(&self, width: u16) -> Vec<Line<'static>> {
-        self.clear_ui_header_lines_with_version(width, CODEX_CLI_VERSION)
     }
 
     pub(super) fn queue_clear_ui_header(&mut self, tui: &mut tui::Tui) {

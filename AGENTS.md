@@ -222,80 +222,51 @@ These guidelines apply to app-server protocol work in `codex-rs`, especially:
 
 This is my personal fork of `openai/codex` that adds support for
 driving Anthropic Claude models (primarily `claude-opus-4-7`) through
-the unmodified Codex CLI. The fork adds **one new crate** and **one
-wrapper script** to upstream; no Codex CLI source files are modified,
-so upstream merges should generally apply cleanly.
+the unmodified Codex CLI. This fork adds **one wrapper script** plus
+a couple of `~/.codex/config.toml` entries; no Codex CLI source files
+are modified, so upstream merges should generally apply cleanly.
 
 ## What was added
 
-- **`codex-rs/anthropic-translator/`** — a Rust crate that exposes
-  the OpenAI Responses API on its inbound side and speaks the
-  Anthropic Messages API on its outbound side. Codex POSTs to it as
-  if it were OpenAI; it emits `POST /v1/messages` to a downstream
-  proxy (anthroproxy → Anthropic-on-Vertex). Comprehensive details —
-  wire contract, per-model rules, tool reshaping, manual cache
-  planner, stream translator state machine, beta header support,
-  known gaps, recipes for extending, and the May 2026 hardening pass
-  audit log — live in the crate's README:
-
-  **[`codex-rs/anthropic-translator/README.md`](codex-rs/anthropic-translator/README.md)**
-
-  This is the primary doc to reread when picking the crate up cold.
-  It explains the Vertex compatibility floor (every type and field
-  must be GA-or-beta on Anthropic-on-Vertex), TDD discipline (tests-
-  first is mandatory; the May 2026 hardening pass is the empirical
-  receipt for why), and the rationale behind every non-obvious design
-  decision (e.g. why manual caching rather than Anthropic's automatic
-  caching, why adaptive-only thinking on Opus 4.7, why `apply_patch`
-  is synthesized as an eager-streaming function tool with a
-  `raw: string` schema, why `local_shell` is round-tripped as a
-  dedicated `OutputItem::LocalShellCall`).
-
-- **`scripts/cmxcdx`** — wrapper script that auto-starts the
-  translator on demand and execs the forked codex binary. End-user
-  setup, configuration, env vars, troubleshooting:
+- **`scripts/cmxcdx`** — thin wrapper around the forked `codex`
+  binary that defaults to `-p opus` (Claude Opus 4.7 via anthroproxy).
+  End-user setup, configuration, env vars, troubleshooting:
 
   **[`CMXCDX.md`](CMXCDX.md)** at the repo root.
 
-## Workspace integration
+- **`scripts/cmxcdx-app`** — sister wrapper that launches the
+  notarized OpenAI Codex Desktop bundle pointed at the same
+  anthroproxy provider, with a sanity check on the
+  `~/.codex/config.toml` workaround keys
+  (`requires_openai_auth = true`, top-level `model_provider`,
+  `model_catalog_json`).
 
-- The crate is registered in `codex-rs/Cargo.toml` workspace members
-  and `[workspace.dependencies]`.
-- It depends on standard workspace deps (axum, tokio, reqwest,
-  serde, eventsource-stream, etc.) plus dev-deps wiremock and
-  pretty_assertions.
-- The Codex CLI (`codex-cli` crate) does not depend on the
-  translator; they are two independent binaries that talk over HTTP.
-  This keeps the diff against upstream zero.
-- `codex-rs/models-manager/models.json` includes a `claude-opus-4-7`
-  entry so Codex's model registry recognises the model when invoked
-  via the translator.
+- **`codex-rs/models-manager/models.json`** — single `claude-opus-4-7`
+  entry so Codex's model registry recognises the Anthropic model when
+  invoked via the anthroproxy provider.
 
-## Conventions specific to this crate
+The Codex CLI (`codex-cli` crate) is unmodified; routing happens
+entirely via the `model_providers.anthroproxy` block in
+`~/.codex/config.toml` pointing at `http://127.0.0.1:6969/v1`.
 
-The translator crate enforces a stricter convention than upstream
-in some areas, called out in its README:
+## Where the translator lives now
 
-- **TDD is mandatory** — no implementation lands without a failing
-  test first, and the test must pin the *real* wire shape from the
-  upstream source of truth (Anthropic doc URL or Codex `protocol/`
-  type), not a guess. The May 2026 hardening pass found a class of
-  bugs hiding behind tests that round-tripped against fictional
-  shapes — see the README's "May 2026 hardening pass" section for
-  the autopsy.
-- **Read Anthropic docs before designing types** — and read the
-  Vertex-specific notes within them, since "current on the direct
-  API" frequently means "rejected by Vertex" (e.g. Anthropic-direct
-  exposes `web_search_20260209` with dynamic filtering, but Vertex
-  only accepts the older `web_search_20250305`). Cite the doc URL
-  in the test's module docstring as the source of truth for each
-  pinned shape.
-- **Vertex compatibility floor** — only model features that are at
-  least beta on Anthropic-on-Vertex per the
-  [features overview](https://docs.anthropic.com/en/docs/build-with-claude/overview).
-- **Module size cap** — the translate/ module is intentionally split
-  into focused submodules (`model_spec`, `thinking`, `tools`,
-  `messages`, `cache`, `request`, `stream`, `raw_string_extractor`)
-  to stay under the workspace's 500-LoC target.
+Until the May 2026 merge there was a `codex-rs/anthropic-translator/`
+crate in this repo that translated the OpenAI Responses API into
+Anthropic Messages on its way out to anthroproxy. That crate has
+moved into the `rust-vertex-ai-proxy` workspace and is now embedded
+directly in the `vertex-proxy` binary that ships inside
+`Anthroproxy.app`. One process, one port, one bundle.
 
+The translator's full design doc — wire contract, per-model rules,
+tool reshaping, manual cache planner, stream translator state machine,
+beta header support, known gaps, recipes for extending, May 2026
+hardening pass audit log, TDD discipline, Vertex compatibility floor
+— lives at:
+
+- `~/Documents/Personal/VertexAI-Anthropic-Proxy/rust-vertex-ai-proxy/anthropic-translator/README.md`
+
+Read that before changing translator behavior. Anything that needs
+saying about the translator inside *this* repo is just routing
+config; the contract lives next to the code.
 

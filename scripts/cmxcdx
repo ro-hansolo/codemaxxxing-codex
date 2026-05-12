@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 # cmxcdx — codexmaxxxing launcher.
 #
-# Starts the local Anthropic translator (if not already running),
-# then runs the forked `codex` binary against it. Translator is
-# torn down when this script exits.
+# Thin wrapper around the forked `codex` binary that defaults to
+# `-p opus` (Claude Opus 4.7 via anthroproxy). Codex talks straight to
+# the merged anthroproxy binary on `127.0.0.1:6969` (the
+# Anthroproxy.app menu bar app) — that single binary serves both the
+# Anthropic Messages passthrough (/v1/messages) and the OpenAI
+# Responses translator (/v1/responses) on one port.
+#
+# Until the May 2026 merge this script also auto-spawned the
+# standalone `codex-anthropic-translator` binary on :7070 and tore it
+# down on exit. That whole code path is gone now — the translator
+# lives in the `rust-vertex-ai-proxy` workspace and ships inside the
+# Anthroproxy.app bundle. If `:6969` isn't listening, launch the app
+# (or run the binary directly): see CMXCDX.md.
 #
 # Configuration (env vars, with defaults):
-#   CMXCDX_REPO        Path to the codemaxxxing-codex checkout.
-#                      Defaults to the directory containing this script.
-#   CMXCDX_LISTEN      Translator listen address. Default 127.0.0.1:7070.
-#   CMXCDX_UPSTREAM    Upstream anthroproxy URL. Default http://127.0.0.1:6969.
-#   CMXCDX_BETA        Comma-separated anthropic-beta features. Empty by default.
-#   CMXCDX_LOG         Path for translator stderr/stdout. Default
-#                      /tmp/cmxcdx-translator.log.
-#   CMXCDX_PROFILE     Codex profile to invoke. Default `opus`. Pass `--`
-#                      followed by codex args to override per invocation.
+#   CMXCDX_REPO     Path to the codemaxxxing-codex checkout.
+#                   Defaults to the directory containing this script.
+#   CMXCDX_PROFILE  Codex profile to invoke. Default `opus`. Pass `--`
+#                   followed by codex args to override per invocation.
 #
 # Usage:
 #   cmxcdx                       # runs `codex -p $CMXCDX_PROFILE`
@@ -33,20 +38,10 @@ while [[ -L "$source" ]]; do
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$source")/.." && pwd)"
 REPO="${CMXCDX_REPO:-$SCRIPT_DIR}"
-LISTEN="${CMXCDX_LISTEN:-127.0.0.1:7070}"
-UPSTREAM="${CMXCDX_UPSTREAM:-http://127.0.0.1:6969}"
-BETA="${CMXCDX_BETA:-}"
-LOG="${CMXCDX_LOG:-/tmp/cmxcdx-translator.log}"
 PROFILE="${CMXCDX_PROFILE:-opus}"
 
-TRANSLATOR_BIN="$REPO/codex-rs/target/release/codex-anthropic-translator"
 CODEX_BIN="$REPO/codex-rs/target/release/codex"
 
-if [[ ! -x "$TRANSLATOR_BIN" ]]; then
-    echo "cmxcdx: translator binary not found at $TRANSLATOR_BIN" >&2
-    echo "  build it with: (cd $REPO/codex-rs && cargo build --release -p codex-anthropic-translator)" >&2
-    exit 1
-fi
 if [[ ! -x "$CODEX_BIN" ]]; then
     echo "cmxcdx: codex binary not found at $CODEX_BIN" >&2
     echo "  build it with: (cd $REPO/codex-rs && cargo build --release -p codex-cli)" >&2
@@ -61,29 +56,4 @@ if [[ "${1:-}" == "--" ]]; then
     codex_args=("$@")
 fi
 
-# Start translator if nothing's listening on the port already. Reuse
-# an existing translator process if one is up — saves spinup time
-# across rapid `cmxcdx` invocations.
-TRANSLATOR_PID=""
-if ! nc -z 127.0.0.1 "${LISTEN##*:}" >/dev/null 2>&1; then
-    args=("--listen" "$LISTEN" "--upstream" "$UPSTREAM")
-    if [[ -n "$BETA" ]]; then
-        args+=("--beta" "$BETA")
-    fi
-    "$TRANSLATOR_BIN" "${args[@]}" >>"$LOG" 2>&1 &
-    TRANSLATOR_PID=$!
-    # Wait up to 5 seconds for the translator to bind.
-    for _ in {1..50}; do
-        if nc -z 127.0.0.1 "${LISTEN##*:}" >/dev/null 2>&1; then
-            break
-        fi
-        sleep 0.1
-    done
-    # Tear down on exit. We can't `exec` codex below — that would
-    # replace the bash process and skip the trap entirely, leaving an
-    # orphaned translator. So we run codex as a subprocess and let the
-    # trap fire when the script exits.
-    trap 'kill "$TRANSLATOR_PID" 2>/dev/null || true' EXIT
-fi
-
-"$CODEX_BIN" "${codex_args[@]}"
+exec "$CODEX_BIN" "${codex_args[@]}"

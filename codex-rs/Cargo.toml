@@ -2,7 +2,6 @@
 members = [
     "aws-auth",
     "analytics",
-    "anthropic-translator",
     "agent-graph-store",
     "agent-identity",
     "backend-client",
@@ -140,7 +139,6 @@ codex-app-server-daemon = { path = "app-server-daemon" }
 codex-app-server-client = { path = "app-server-client" }
 codex-app-server-protocol = { path = "app-server-protocol" }
 codex-app-server-test-client = { path = "app-server-test-client" }
-codex-anthropic-translator = { path = "anthropic-translator" }
 codex-apply-patch = { path = "apply-patch" }
 codex-arg0 = { path = "arg0" }
 codex-async-utils = { path = "async-utils" }

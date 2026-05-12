@@ -117,7 +117,7 @@
       "default_reasoning_summary": "auto",
       "slug": "claude-opus-4-7",
       "display_name": "Claude Opus 4.7",
-      "description": "Anthropic's frontier coding/agentic model, routed via codex-anthropic-translator -> anthroproxy -> Anthropic-on-Vertex.",
+      "description": "Anthropic's frontier coding/agentic model, routed via anthroproxy -> Anthropic-on-Vertex.",
       "default_reasoning_level": "high",
       "supported_reasoning_levels": [
         {

@@ -1,46 +1,39 @@
 #!/usr/bin/env bash
-# cmxcdx-app — launch Codex Desktop wired to this fork's translator.
+# cmxcdx-app — launch Codex Desktop wired through anthroproxy.
 #
 # Per openai/codex#10867 the desktop app hides the model picker for any
 # custom `model_provider` unless `requires_openai_auth = true` is set,
 # and even then it only shows models served by the provider's
-# `GET <base_url>/models` endpoint. So this wrapper does three things:
+# `GET <base_url>/models` endpoint. So this wrapper:
 #
-#   1. Make sure your `~/.codex/config.toml` has the workaround keys
-#      configured (`requires_openai_auth = true` on the translator
-#      provider, top-level `model_provider = "anthroproxy"`). If they
-#      are missing it prints exactly what to add and exits.
-#   2. Start the translator on `:7070` (same logic as cmxcdx). The
-#      translator now serves `GET /v1/models` returning Claude Opus 4.7,
-#      so the desktop's model picker can find it.
-#   3. `open -W -a /Applications/Codex.app <workspace>` and wait for
-#      the app to quit, then tear the translator down.
+#   1. Verifies that `~/.codex/config.toml` has the workaround keys
+#      configured. If they are missing it prints what to add and exits.
+#   2. `open -W -a /Applications/Codex.app <workspace>` and waits for
+#      the app to quit.
 #
-# No bundle modification, no codesign hacks. The original notarized
-# Codex.app is launched as-is; only its routing changes via your
-# config.toml, which the desktop app's bundled codex reads on startup.
+# Routing: Codex Desktop's bundled `codex` reads `~/.codex/config.toml`
+# on startup and points every turn at the merged anthroproxy binary on
+# `127.0.0.1:6969` (Anthroproxy.app menu bar app). That binary serves
+# both /v1/messages (Anthropic passthrough) and /v1/responses (OpenAI
+# Responses translator) on one port. No bundle modification, no
+# codesign hacks; the notarized Codex.app is launched as-is.
+#
+# Until the May 2026 merge this wrapper also auto-spawned a standalone
+# `codex-anthropic-translator` binary on :7070. That code path is gone
+# — start Anthroproxy.app (or run its `vertex-proxy` binary directly)
+# before launching the desktop. See CMXCDX.md.
 #
 # When the desktop asks you to log in on first launch, choose
 # "API key" and enter any character (per the workaround in the issue).
 
 set -euo pipefail
 
-source="${BASH_SOURCE[0]}"
-while [[ -L "$source" ]]; do
-    dir="$(cd -P "$(dirname "$source")" && pwd)"
-    source="$(readlink "$source")"
-    [[ "$source" != /* ]] && source="$dir/$source"
-done
-SCRIPT_DIR="$(cd -P "$(dirname "$source")/.." && pwd)"
-REPO="${CMXCDX_REPO:-$SCRIPT_DIR}"
-LISTEN="${CMXCDX_LISTEN:-127.0.0.1:7070}"
-UPSTREAM="${CMXCDX_UPSTREAM:-http://127.0.0.1:6969}"
-BETA="${CMXCDX_BETA:-}"
-LOG="${CMXCDX_LOG:-/tmp/cmxcdx-translator.log}"
 CONFIG="${CMXCDX_CONFIG:-$HOME/.codex/config.toml}"
 SOURCE_APP="${CMXCDX_APP:-/Applications/Codex.app}"
-TRANSLATOR_BIN="$REPO/codex-rs/target/release/codex-anthropic-translator"
-MODEL_CATALOG="$REPO/codex-rs/anthropic-translator/data/models.json"
+# Default model catalog now lives in the rust-vertex-ai-proxy workspace
+# (where the translator was migrated to). Override via CMXCDX_MODEL_CATALOG
+# if your checkout lives elsewhere.
+MODEL_CATALOG="${CMXCDX_MODEL_CATALOG:-$HOME/Documents/Personal/VertexAI-Anthropic-Proxy/rust-vertex-ai-proxy/anthropic-translator/data/models.json}"
 
 workspace="${1:-$PWD}"
 if [[ ! -d "$workspace" ]]; then
@@ -54,20 +47,16 @@ if [[ ! -d "$SOURCE_APP" ]]; then
     echo "  Install it via: cmxcdx -- app" >&2
     exit 1
 fi
-if [[ ! -x "$TRANSLATOR_BIN" ]]; then
-    echo "cmxcdx-app: translator binary missing at $TRANSLATOR_BIN" >&2
-    echo "  build it with: (cd $REPO/codex-rs && cargo build --release -p codex-anthropic-translator)" >&2
-    exit 1
-fi
 if [[ ! -f "$MODEL_CATALOG" ]]; then
-    echo "cmxcdx-app: missing $MODEL_CATALOG (model catalog file)" >&2
+    echo "cmxcdx-app: model catalog file missing at $MODEL_CATALOG" >&2
+    echo "  Override with CMXCDX_MODEL_CATALOG=/abs/path/models.json" >&2
     exit 1
 fi
 
 # Ensure the desktop-app workaround is configured. The picker is hidden
 # without requires_openai_auth = true, and turns route to OpenAI rather
-# than the translator unless model_provider is set globally. Detection
-# is a literal string match because we only need to catch the missing
+# than anthroproxy unless model_provider is set globally. Detection is
+# a literal string match because we only need to catch the missing
 # case, and parsing TOML in bash is its own bag of pain.
 missing_keys=()
 if ! grep -qE '^[[:space:]]*requires_openai_auth[[:space:]]*=[[:space:]]*true' "$CONFIG" 2>/dev/null; then
@@ -88,18 +77,18 @@ if (( ${#missing_keys[@]} > 0 )); then
 
 Add these blocks to $CONFIG and re-run:
 
-    # Top-level: route every desktop turn through the translator.
+    # Top-level: route every desktop turn through anthroproxy.
     model_provider = "anthroproxy"
     # Top-level: feed our claude-opus-4-7 catalog into the desktop picker.
     model_catalog_json = "$MODEL_CATALOG"
 
     [model_providers.anthroproxy]
-    # ... your existing keys, plus:
+    # ...your existing keys, plus:
     requires_openai_auth = true
 
 On first launch the desktop app will prompt for an OpenAI login. Pick
-"API key" and enter any character; the translator ignores it and the
-anthroproxy upstream injects real auth itself.
+"API key" and enter any character; anthroproxy ignores it and injects
+real Vertex auth itself.
 
 Docs:
   https://developers.openai.com/codex/config-reference
@@ -108,24 +97,16 @@ EOF
     exit 1
 fi
 
-# Start translator if nothing's listening on the port already.
-TRANSLATOR_PID=""
-if ! nc -z 127.0.0.1 "${LISTEN##*:}" >/dev/null 2>&1; then
-    args=("--listen" "$LISTEN" "--upstream" "$UPSTREAM")
-    if [[ -n "$BETA" ]]; then
-        args+=("--beta" "$BETA")
-    fi
-    "$TRANSLATOR_BIN" "${args[@]}" >>"$LOG" 2>&1 &
-    TRANSLATOR_PID=$!
-    for _ in {1..50}; do
-        if nc -z 127.0.0.1 "${LISTEN##*:}" >/dev/null 2>&1; then
-            break
-        fi
-        sleep 0.1
-    done
-    trap 'kill "$TRANSLATOR_PID" 2>/dev/null || true' EXIT
+# Make sure anthroproxy itself is up. Without it, every desktop turn
+# will fail with a connection-refused error that's annoying to debug
+# from inside the desktop UI. Lightweight TCP probe — no curl, no
+# external deps.
+if ! nc -z 127.0.0.1 6969 >/dev/null 2>&1; then
+    echo "cmxcdx-app: nothing listening on 127.0.0.1:6969" >&2
+    echo "  Start Anthroproxy.app (menu bar app) or run its binary directly:" >&2
+    echo "    /Applications/Anthroproxy.app/Contents/MacOS/vertex-proxy" >&2
+    exit 1
 fi
 
-# Launch the original notarized Codex.app and block until it quits, so
-# the trap above can tear the translator down.
+# Launch the original notarized Codex.app and block until it quits.
 open -W -a "$SOURCE_APP" "$workspace"
